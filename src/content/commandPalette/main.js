@@ -1,8 +1,6 @@
-import { createApp } from 'vue';
-import vRemixicon from 'v-remixicon';
-import App from './App.vue';
-import compsUi from './compsUi';
-import icons from './icons';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 
 const additionalStyle = `.list-item-active svg { visibility: visible }`;
 
@@ -16,9 +14,6 @@ export default function (rootElement) {
   rootElement.shadowRoot.appendChild(style);
   rootElement.shadowRoot.appendChild(appRoot);
 
-  createApp(App)
-    .use(compsUi)
-    .use(vRemixicon, icons)
-    .provide('rootElement', rootElement)
-    .mount(appRoot);
+  const root = createRoot(appRoot);
+  root.render(React.createElement(App, { rootElement }));
 }

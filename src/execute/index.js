@@ -1,5 +1,7 @@
 import { parseJSON } from '@/utils/helper';
 import { sendMessage } from '@/utils/message';
+import React, { useEffect, useState } from 'react';
+import { createRoot } from 'react-dom/client';
 import Browser from 'webextension-polyfill';
 
 function getWorkflowDetail() {
@@ -11,7 +13,7 @@ function getWorkflowDetail() {
   const variables = {};
   const { 1: workflowId } = pathname.split('/');
 
-  searchParams.forEach((key, value) => {
+  searchParams.forEach((value, key) => {
     const varValue = parseJSON(decodeURIComponent(value), '##_empty');
     if (varValue === '##_empty') return;
 
@@ -21,45 +23,71 @@ function getWorkflowDetail() {
   return { workflowId: workflowId ?? '', variables };
 }
 
-function writeResult(text) {
-  document.body.innerText = text;
+function ExecuteApp() {
+  const [message, setMessage] = useState('Loading...');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { workflowId, variables } = getWorkflowDetail();
+        if (!workflowId) {
+          setMessage('Invalid path');
+          return;
+        }
+
+        const { workflows } = await Browser.storage.local.get('workflows');
+
+        let workflow = workflows[workflowId];
+        if (!workflow && Array.isArray(workflows)) {
+          workflow = workflows.find((item) => item.id === workflowId);
+        }
+
+        if (!workflow) {
+          setMessage('Workflow not found');
+          return;
+        }
+
+        const hasVariables = Object.keys(variables).length > 0;
+
+        setMessage('Executing workflow');
+
+        sendMessage(
+          'workflow:execute',
+          {
+            ...workflow,
+            options: { checkParam: !hasVariables, data: { variables } },
+          },
+          'background'
+        ).then(() => {
+          setTimeout(window.close, 1000);
+        });
+      } catch (error) {
+        console.error(error);
+        setMessage('Unable to execute workflow');
+      }
+    })();
+  }, []);
+
+  return React.createElement(
+    'div',
+    {
+      className: 'execute-message',
+      'aria-live': 'polite',
+    },
+    message
+  );
 }
 
-(async () => {
+const container = document.getElementById('app');
+
+if (container) {
   try {
-    const { workflowId, variables } = getWorkflowDetail();
-    if (!workflowId) {
-      writeResult('Invalid path');
-      return;
-    }
-
-    const { workflows } = await Browser.storage.local.get('workflows');
-
-    let workflow = workflows[workflowId];
-    if (!workflow && Array.isArray(workflows)) {
-      workflow = workflows.find((item) => item.id === workflowId);
-    }
-
-    if (!workflow) {
-      writeResult('Workflow not found');
-      return;
-    }
-
-    const hasVariables = Object.keys(variables).length > 0;
-
-    writeResult('Executing workflow');
-
-    sendMessage(
-      'workflow:execute',
-      {
-        ...workflow,
-        options: { checkParam: !hasVariables, data: { variables } },
-      },
-      'background'
-    ).then(() => {
-      setTimeout(window.close, 1000);
-    });
+    const root = createRoot(container);
+    root.render(React.createElement(ExecuteApp));
   } catch (error) {
-    console.error(error);
+    console.error('Failed to initialize execute page:', error);
+    container.innerText = 'Unable to initialize execute page';
   }
-})();
+} else {
+  console.error('Missing #app container for execute page');
+}
