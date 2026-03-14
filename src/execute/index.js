@@ -13,7 +13,7 @@ function getWorkflowDetail() {
   const variables = {};
   const { 1: workflowId } = pathname.split('/');
 
-  searchParams.forEach((key, value) => {
+  searchParams.forEach((value, key) => {
     const varValue = parseJSON(decodeURIComponent(value), '##_empty');
     if (varValue === '##_empty') return;
 
@@ -68,14 +68,26 @@ function ExecuteApp() {
     })();
   }, []);
 
-  return React.createElement('div', { className: 'p-4' }, message);
+  return React.createElement(
+    'div',
+    {
+      className: 'execute-message',
+      'aria-live': 'polite',
+    },
+    message
+  );
 }
 
 const container = document.getElementById('app');
 
 if (container) {
-  const root = createRoot(container);
-  root.render(React.createElement(ExecuteApp));
+  try {
+    const root = createRoot(container);
+    root.render(React.createElement(ExecuteApp));
+  } catch (error) {
+    console.error('Failed to initialize execute page:', error);
+    container.innerText = 'Unable to initialize execute page';
+  }
 } else {
   console.error('Missing #app container for execute page');
 }
