@@ -24,6 +24,12 @@ const defaultParamsList = {
 };
 
 const os = navigator.appVersion.includes('Mac') ? 'mac' : 'win';
+const ICON_FALLBACK_REMIXICON = '◎';
+const ICON_DEFAULT_WORKFLOW = '🌐';
+const ICON_WORKFLOW_ACTION_ARROW = '↵';
+const logoUrl = browser.runtime.getURL(
+  process.env.NODE_ENV === 'development' ? '/icon-dev-128.png' : '/icon-128.png'
+);
 const additionalStyles = `
   .cp-backdrop{position:fixed;top:0;left:0;height:100%;width:100%;background:rgba(0,0,0,.5);padding:1rem;color:#111;z-index:99999999}
   .cp-card{position:absolute;left:50%;top:50px;transform:translateX(-50%);width:100%;max-width:48rem;background:#fff;border-radius:.75rem;box-shadow:0 10px 30px rgba(0,0,0,.25)}
@@ -43,10 +49,13 @@ const additionalStyles = `
   .cp-grow{flex:1}
   .cp-btn{border:1px solid #7c3aed;background:#7c3aed;color:#fff;border-radius:.5rem;padding:.4rem .8rem;cursor:pointer}
   .cp-empty,.cp-loading{text-align:center;color:#6b7280;padding:.5rem}
+  .cp-param-list{list-style:none;padding:0;margin:0}
   .cp-param-item{margin-bottom:1rem}
+  .cp-param-list .cp-param-item + .cp-param-item{padding-top:1rem;border-top:1px solid #e5e7eb}
   .cp-label{display:block;margin-bottom:.35rem;font-size:.9rem}
   .cp-field{width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:.5rem;padding:.5rem .75rem}
   .cp-help{margin:.35rem 0 0 .25rem;font-size:.875rem;color:#6b7280}
+  .cp-logo{width:2rem;height:2rem}
 `;
 
 function getReadableShortcut(str) {
@@ -77,6 +86,12 @@ function getParamsValues(params, paramsList) {
   }, {});
 }
 
+function getWorkflowIconFallback(workflowIcon) {
+  return typeof workflowIcon === 'string' && workflowIcon.length > 0
+    ? ICON_FALLBACK_REMIXICON
+    : ICON_DEFAULT_WORKFLOW;
+}
+
 export default function CommandPaletteApp({ rootElement }) {
   const [paramsList, setParamsList] = useState(defaultParamsList);
   const [query, setQuery] = useState('');
@@ -89,13 +104,14 @@ export default function CommandPaletteApp({ rootElement }) {
   const [paramItems, setParamItems] = useState([]);
   const [paramWorkflow, setParamWorkflow] = useState({});
   const inputRef = useRef(null);
+  const loweredQuery = query.toLocaleLowerCase();
 
   const filteredWorkflows = useMemo(
     () =>
       workflows.filter((workflow) =>
-        workflow.name?.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+        (workflow.name || '').toLocaleLowerCase().includes(loweredQuery)
       ),
-    [query, workflows]
+    [loweredQuery, workflows]
   );
 
   const clearParamsState = useCallback(() => {
@@ -206,7 +222,7 @@ export default function CommandPaletteApp({ rootElement }) {
           setRetrieved(true);
         })
         .catch((error) => {
-          console.error(error);
+          console.error('Failed to retrieve workflows:', error);
           setRetrieved(true);
         });
     }
@@ -287,10 +303,6 @@ export default function CommandPaletteApp({ rootElement }) {
     }
   };
 
-  const logoUrl = browser.runtime.getURL(
-    process.env.NODE_ENV === 'development' ? '/icon-dev-128.png' : '/icon-128.png'
-  );
-
   if (!active) return null;
 
   return React.createElement(
@@ -314,7 +326,7 @@ export default function CommandPaletteApp({ rootElement }) {
           React.createElement(
             'label',
             { className: 'cp-search' },
-            React.createElement('img', { src: logoUrl, className: 'h-8 w-8', alt: 'Automa' }),
+            React.createElement('img', { src: logoUrl, className: 'cp-logo', alt: 'Automa' }),
             React.createElement('input', {
               ref: inputRef,
               type: 'text',
@@ -322,6 +334,7 @@ export default function CommandPaletteApp({ rootElement }) {
               placeholder: paramsActive
                 ? paramWorkflow.name
                 : 'Search workflows...',
+              disabled: paramsActive,
               onInput: (event) => {
                 if (paramsActive) return;
                 setQuery(event.target.value);
@@ -341,15 +354,22 @@ export default function CommandPaletteApp({ rootElement }) {
           'div',
           { className: 'cp-list-wrap workflows-list' },
           !retrieved
-            ? React.createElement('div', { className: 'cp-loading' }, 'Loading...')
+            ? React.createElement(
+                'div',
+                { className: 'cp-loading', role: 'status', 'aria-live': 'polite' },
+                'Loading...'
+              )
             : paramsActive
               ? React.createElement(
                   'ul',
-                  { className: 'space-y-4 divide-y' },
+                  { className: 'cp-param-list' },
                   ...paramItems.map((param, paramIdx) =>
                     React.createElement(
                       'li',
-                      { key: `${param.name}-${paramIdx}`, className: 'cp-param-item' },
+                      {
+                        key: param.id || `param-${paramIdx}`,
+                        className: 'cp-param-item',
+                      },
                       React.createElement(
                         'label',
                         { className: 'cp-label' },
@@ -359,7 +379,10 @@ export default function CommandPaletteApp({ rootElement }) {
                         ? React.createElement('textarea', {
                             className: 'cp-field',
                             rows: 3,
-                            value: param.value ?? '',
+                            value:
+                              param.value === null || param.value === undefined
+                                ? ''
+                                : param.value,
                             placeholder: param.placeholder || '',
                             onChange: (event) => {
                               const value = event.target.value;
@@ -373,7 +396,10 @@ export default function CommandPaletteApp({ rootElement }) {
                         : React.createElement('input', {
                             className: 'cp-field',
                             type: param.inputType || param.type || 'text',
-                            value: param.value ?? '',
+                            value:
+                              param.value === null || param.value === undefined
+                                ? ''
+                                : param.value,
                             placeholder: param.placeholder || '',
                             onChange: (event) => {
                               const value = event.target.value;
@@ -395,15 +421,26 @@ export default function CommandPaletteApp({ rootElement }) {
                   )
                 )
               : filteredWorkflows.length === 0 && query
-                ? React.createElement('p', { className: 'cp-empty' }, "Can't find workflows")
+                ? React.createElement(
+                    'p',
+                    { className: 'cp-empty', role: 'status', 'aria-live': 'polite' },
+                    "Can't find workflows"
+                  )
                 : React.createElement(
                     'div',
                     null,
-                    ...filteredWorkflows.map((workflow, index) =>
-                      React.createElement(
+                    ...filteredWorkflows.map((workflow, index) => {
+                      const workflowName = workflow.name || 'Unnamed workflow';
+                      const workflowDescription = workflow.description || '';
+                      const workflowKey =
+                        workflow.id ||
+                        workflow.hostId ||
+                        `${workflowName}-${workflow.createdAt || workflow.updatedAt || 'workflow'}`;
+
+                      return React.createElement(
                         'div',
                         {
-                          key: workflow.id || `${workflow.name}-${index}`,
+                          key: workflowKey,
                           id: `list-item-${index}`,
                           className: `cp-item ${index === selectedIndex ? 'active' : ''}`,
                           onMouseEnter: () => setSelectedIndex(index),
@@ -415,20 +452,24 @@ export default function CommandPaletteApp({ rootElement }) {
                               className: 'cp-icon',
                               alt: '',
                             })
-                          : React.createElement('div', { className: 'cp-icon' }, 'icon'),
+                          : React.createElement(
+                              'div',
+                              { className: 'cp-icon' },
+                              getWorkflowIconFallback(workflow.icon)
+                            ),
                         React.createElement(
                           'div',
                           { className: 'cp-body' },
-                          React.createElement('p', { className: 'cp-name' }, workflow.name),
+                          React.createElement('p', { className: 'cp-name' }, workflowName),
                           React.createElement(
                             'p',
                             { className: 'cp-desc' },
-                            workflow.description
+                            workflowDescription
                           )
                         ),
-                        React.createElement('span', null, '↵')
-                      )
-                    )
+                        React.createElement('span', null, ICON_WORKFLOW_ACTION_ARROW)
+                      );
+                    })
                   )
         ),
         React.createElement(
@@ -438,7 +479,9 @@ export default function CommandPaletteApp({ rootElement }) {
             ? React.createElement(
                 'div',
                 { style: { color: '#6b7280' } },
-                `${paramWorkflow.description || ''} Press Escape to cancel`
+                paramWorkflow.description
+                  ? `${paramWorkflow.description} · Press Escape to cancel`
+                  : 'Press Escape to cancel'
               )
             : React.createElement(
                 'p',
