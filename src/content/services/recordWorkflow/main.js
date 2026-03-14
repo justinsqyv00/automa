@@ -1,7 +1,6 @@
-import { createApp } from 'vue';
-import vRemixicon from 'v-remixicon';
-import App from './App.vue';
-import icons from './icons';
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App';
 import injectAppStyles from '../../injectAppStyles';
 
 const customCSS = `
@@ -26,9 +25,9 @@ export default function () {
     appRoot.setAttribute('id', 'app');
     rootElement.shadowRoot.appendChild(appRoot);
 
-    const app = createApp(App).use(vRemixicon, icons);
-    app.mount(appRoot);
+    const root = createRoot(appRoot);
+    root.render(React.createElement(App));
 
-    return app;
+    return root;
   });
 }
